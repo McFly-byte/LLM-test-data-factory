@@ -27,7 +27,10 @@ class LLMClient:
     ) -> None:
         key = api_key or config.OPENAI_API_KEY
         if not key:
-            raise ValueError("未设置 OPENAI_API_KEY，无法调用模型")
+            raise ValueError(
+                "未设置 API Key：请在环境变量 SILICONFLOW_API_KEY 中填入硅基流动密钥，"
+                "或设置 OPENAI_API_KEY（兼容其它 OpenAI 兼容服务商）。"
+            )
         self._client = OpenAI(api_key=key, base_url=base_url or config.OPENAI_BASE_URL, timeout=timeout)
         self._model = model or config.OPENAI_MODEL
         self._max_retries = max(1, max_retries)

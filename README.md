@@ -67,17 +67,36 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-## 环境变量
+## 环境变量（硅基流动 SiliconFlow）
+
+**在哪里填入 API Key（任选其一，推荐第 1 种）：**
+
+1. **项目根目录 `.env` 文件（推荐）**  
+   在 `LLM Test Data Factory/` 下新建或编辑 `.env`，至少包含 Key；**模型名建议在 `.env` 中显式配置**（与硅基流动模型广场 ID 一致）：
+   ```env
+   SILICONFLOW_API_KEY="sk-你的硅基流动密钥"
+   SILICONFLOW_MODEL="Qwen/Qwen3.5-35B-A3B"
+   ```
+   `app/main.py` 已调用 `load_dotenv()`，运行 `python app/main.py` 时会自动加载。
+
+2. **系统 / 终端环境变量**  
+   Windows PowerShell 示例：
+   ```powershell
+   $env:SILICONFLOW_API_KEY="sk-..."
+   python app/main.py
+   ```
 
 | 变量 | 说明 | 默认值 |
 |---|---|---|
-| `OPENAI_API_KEY` | OpenAI 或兼容服务的 API Key | 空（必填） |
-| `OPENAI_BASE_URL` | 兼容接口 Base URL | `https://api.openai.com/v1` |
-| `OPENAI_MODEL` | 模型名 | `gpt-4o-mini` |
+| `SILICONFLOW_API_KEY` | **硅基流动 API Key（sk-...），优先读取** | 空（运行前必填其一） |
+| `OPENAI_API_KEY` | 未设置上一项时的兼容回退 | 空 |
+| `OPENAI_BASE_URL` | OpenAI 兼容 Base URL | `https://api.siliconflow.cn/v1` |
+| `SILICONFLOW_MODEL` | **模型 ID（推荐在 `.env` 配置）**，须与模型广场一致 | 未设置时为 `Qwen/Qwen3.5-35B-A3B` |
+| `OPENAI_MODEL` | 兼容命名；仅当未设置 `SILICONFLOW_MODEL` 时生效 | 同上默认 |
 | `LLM_MAX_RETRIES` | LLM 重试次数 | `3` |
 | `LLM_TIMEOUT_SEC` | 超时秒数 | `120` |
 
-也可在项目根目录放置 `.env`（`python-dotenv` 会自动加载）。
+换模型时修改 `.env` 中的 `SILICONFLOW_MODEL`（或设置 `OPENAI_MODEL`）即可，例如：`SILICONFLOW_MODEL="deepseek-ai/DeepSeek-V3"`。
 
 ## 运行
 

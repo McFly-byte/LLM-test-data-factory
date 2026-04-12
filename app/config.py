@@ -25,10 +25,24 @@ KNOWLEDGE_BATCH_MIN = 5
 KNOWLEDGE_BATCH_MAX = 10
 QA_BATCH_SIZE = 5
 
-# LLM 相关环境变量
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+# ---------------------------------------------------------------------------
+# LLM：默认对接「硅基流动 SiliconFlow」（OpenAI 兼容 Chat Completions）
+# API Key 请填在环境变量或项目根目录 .env 中，见 README「环境变量」。
+# ---------------------------------------------------------------------------
+# 硅基流动控制台申请的 sk-... Key（推荐只填这个）
+SILICONFLOW_API_KEY = os.getenv("SILICONFLOW_API_KEY", "").strip()
+# 兼容：若仍使用 OPENAI_API_KEY 命名也可
+_OPENAI_API_KEY_FALLBACK = os.getenv("OPENAI_API_KEY", "").strip()
+# 供 app/utils/llm.py 使用的「最终生效」Key：硅基流动优先
+OPENAI_API_KEY = SILICONFLOW_API_KEY or _OPENAI_API_KEY_FALLBACK
+
+# 硅基流动 OpenAI 兼容 Base URL（必须含 /v1）
+OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.siliconflow.cn/v1")
+# 模型 ID：优先 .env 中的 SILICONFLOW_MODEL，其次 OPENAI_MODEL，最后为下方默认
+SILICONFLOW_MODEL = os.getenv("SILICONFLOW_MODEL", "").strip()
+_OPENAI_MODEL_ENV = os.getenv("OPENAI_MODEL", "").strip()
+_DEFAULT_SILICONFLOW_MODEL = "Qwen/Qwen3.5-35B-A3B"
+OPENAI_MODEL = SILICONFLOW_MODEL or _OPENAI_MODEL_ENV or _DEFAULT_SILICONFLOW_MODEL
 
 LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "3"))
 LLM_TIMEOUT_SEC = float(os.getenv("LLM_TIMEOUT_SEC", "120"))
