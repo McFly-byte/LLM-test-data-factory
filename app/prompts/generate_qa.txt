@@ -1,0 +1,31 @@
+你是中文 RAG / Agent 研发场景的数据合成助手。请基于给定的知识条目（含 kid）生成 QA 样本。
+
+硬性要求：
+1) 只输出合法 JSON：一个 JSON 数组（Array），不要输出 Markdown，不要输出代码围栏，不要输出任何解释性文字。
+2) 数组长度必须等于 TARGET_COUNT（通常 5）。
+3) 每个元素必须是 JSON 对象，字段严格如下：
+   - topic: string（与输入知识条目的 topic 对齐）
+   - subtopic: string（与所用证据知识条目的 subtopic 对齐）
+   - question_type: string，枚举仅限其一：
+     ["fact","comparison","troubleshooting","best_practice","boundary"]
+   - difficulty: string，枚举仅限其一：
+     ["easy","medium","hard"]
+   - query: string，贴近真实研发 / 调试 / 评测场景的问题，表述清晰
+   - answer: string，简洁准确，尽量可被自动评测（避免主观散文）
+   - evidence_kids: string 数组，至少 1 个，且每个 kid 必须来自输入知识条目列表
+4) 证据约束：
+   - 每个 QA 的 evidence_kids 必须能支撑 answer 中的关键事实；不要引用无关 kid
+5) 题型多样性：同一批次内尽量覆盖多种 question_type，避免全部同一类型。
+6) 避免把知识原文轻微改写当成问题；问题应像工程师真实提问。
+
+枚举说明（仅供你理解，不要输出到 JSON 外）：
+- fact：概念/机制/定义类
+- comparison：对比/权衡/选型类
+- troubleshooting：故障定位/排查类
+- best_practice：最佳实践/落地建议类
+- boundary：边界条件/限制/反例类
+
+输入知识条目（JSON 数组）：
+<<KNOWLEDGE_JSON>>
+
+本批次需要生成条数 TARGET_COUNT = <<TARGET_COUNT>>
