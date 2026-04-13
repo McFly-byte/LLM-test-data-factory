@@ -9,12 +9,14 @@ from typing import Any
 
 from app.state import FactoryState, KnowledgeItem, QASample
 from app.utils.csv_export import write_query_answer_csv
+from app.utils.progress import format_factory_snapshot
 
 logger = logging.getLogger(__name__)
 
 
 def export_dataset(state: FactoryState) -> dict[str, Any]:
     """将知识条目与 QA 样本写入 export_dir。"""
+    logger.info("[export_dataset] 开始写出文件 | %s", format_factory_snapshot(state))
     export_dir = Path(state.get("export_dir", "outputs"))
     export_dir.mkdir(parents=True, exist_ok=True)
 
@@ -39,7 +41,10 @@ def export_dataset(state: FactoryState) -> dict[str, Any]:
     write_query_answer_csv(rows, csv_path)
 
     logger.info(
-        "[export_dataset] 已导出：knowledge=%s full=%s csv=%s",
+        "[export_dataset] 已导出 | knowledge行=%s full行=%s eval行=%s | knowledge=%s full=%s csv=%s",
+        len(knowledge_items),
+        len(accepted) + len(rejected) + len(pending),
+        len(accepted),
         knowledge_path.resolve(),
         full_path.resolve(),
         csv_path.resolve(),

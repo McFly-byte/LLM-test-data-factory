@@ -23,8 +23,34 @@ from app.nodes.review_qa import review_qa
 from app.nodes.revise_or_accept import revise_or_accept
 from app.state import FactoryState
 from app.utils.llm import LLMClient
+from app.utils.progress import format_factory_snapshot
 
 logger = logging.getLogger(__name__)
+
+
+def _wrap_node(label: str, run: Any) -> Any:
+    """为节点统一打印「进入 / 离开」与状态快照，便于跟踪整条流水线进展。"""
+
+    def _inner(state: FactoryState) -> Any:
+        logger.info("[%s] >>> 进入 | %s", label, format_factory_snapshot(state))
+        try:
+            out = run(state)
+        except Exception:
+            logger.exception("[%s] <<< 节点执行异常（将向上抛出）", label)
+            raise
+        if isinstance(out, dict) and out:
+            merged: dict[str, Any] = {**dict(state), **out}
+            logger.info(
+                "[%s] <<< 离开 | 更新键=%s | %s",
+                label,
+                sorted(out.keys()),
+                format_factory_snapshot(merged),
+            )
+        else:
+            logger.info("[%s] <<< 离开 | 无合并更新 | %s", label, format_factory_snapshot(state))
+        return out
+
+    return _inner
 
 
 def _knowledge_char_total(state: FactoryState) -> int:
@@ -54,13 +80,14 @@ def route_after_revise(state: FactoryState) -> Literal["export", "review", "grow
     2) 仍有待审核样本 -> review（通常来自修订后的复审）
     3) 否则继续扩增语料与 QA -> grow
     """
+    snap = format_factory_snapshot(state)
     if _export_ready(state):
-        logger.info("[route] 满足终止条件，进入导出。")
+        logger.info("[route] 满足终止条件 -> export_dataset | %s", snap)
         return "export"
     if _needs_review(state):
-        logger.info("[route] 仍有待审核样本，回到 review_qa。")
+        logger.info("[route] 仍有待审核 -> review_qa | %s", snap)
         return "review"
-    logger.info("[route] 继续扩增：generate_knowledge。")
+    logger.info("[route] 继续扩增 -> generate_knowledge | %s", snap)
     return "grow"
 
 
@@ -76,12 +103,12 @@ def build_factory_graph(*, llm: LLMClient | None = None) -> Any:
 
     g: StateGraph[FactoryState] = StateGraph(FactoryState)
 
-    g.add_node("plan_topics", lambda s: plan_topics(s, _client()))
-    g.add_node("generate_knowledge", lambda s: generate_knowledge(s, _client()))
-    g.add_node("generate_qa", lambda s: generate_qa(s, _client()))
-    g.add_node("review_qa", lambda s: review_qa(s, _client()))
-    g.add_node("revise_or_accept", lambda s: revise_or_accept(s, _client()))
-    g.add_node("export_dataset", export_dataset)
+    g.add_node("plan_topics", _wrap_node("plan_topics", lambda s: plan_topics(s, _client())))
+    g.add_node("generate_knowledge", _wrap_node("generate_knowledge", lambda s: generate_knowledge(s, _client())))
+    g.add_node("generate_qa", _wrap_node("generate_qa", lambda s: generate_qa(s, _client())))
+    g.add_node("review_qa", _wrap_node("review_qa", lambda s: review_qa(s, _client())))
+    g.add_node("revise_or_accept", _wrap_node("revise_or_accept", lambda s: revise_or_accept(s, _client())))
+    g.add_node("export_dataset", _wrap_node("export_dataset", export_dataset))
 
     g.set_entry_point("plan_topics")
     g.add_edge("plan_topics", "generate_knowledge")
@@ -100,4 +127,6 @@ def build_factory_graph(*, llm: LLMClient | None = None) -> Any:
     )
 
     g.add_edge("export_dataset", END)
-    return g.compile()
+    compiled = g.compile()
+    logger.info("[graph] StateGraph 编译完成：入口 plan_topics -> … -> export_dataset -> END")
+    return compiled

@@ -10,6 +10,7 @@ from app import config
 from app.state import FactoryState, KnowledgeItem, QASample
 from app.utils.json_parser import JSONParseError, parse_json_object
 from app.utils.llm import LLMClient
+from app.utils.progress import format_factory_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -22,9 +23,14 @@ def revise_or_accept(state: FactoryState, llm: LLMClient | None = None) -> dict[
     """
     pending = list(state.get("pending_qa", []))
     if not pending:
-        logger.info("[revise_or_accept] 无待处理 QA。")
+        logger.info("[revise_or_accept] 无待处理 QA。| %s", format_factory_snapshot(state))
         return {}
 
+    logger.info(
+        "[revise_or_accept] 开始处理 pending=%s 条 | %s",
+        len(pending),
+        format_factory_snapshot(state),
+    )
     knowledge = {k["kid"]: k for k in state.get("knowledge_items", [])}
     max_r = int(state.get("max_revision_rounds", config.MAX_REVISION_ROUNDS))
 

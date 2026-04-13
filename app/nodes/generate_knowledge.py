@@ -6,12 +6,13 @@ import json
 import logging
 import random
 import uuid
-from typing import Any
+from typing import Any, cast
 
 from app import config
 from app.state import FactoryState, KnowledgeItem, TopicPlan
 from app.utils.json_parser import JSONParseError, parse_json_array
 from app.utils.llm import LLMClient
+from app.utils.web_search import hits_as_prompt_json, search_for_topic_plan
 
 logger = logging.getLogger(__name__)
 
@@ -33,12 +34,22 @@ def generate_knowledge(state: FactoryState, llm: LLMClient | None = None) -> dic
     batch_n = random.randint(batch_min, batch_max)
 
     client = llm or LLMClient()
+    hits = search_for_topic_plan(plan)
+    search_json = hits_as_prompt_json(hits)
+    if hits:
+        logger.info("[generate_knowledge] 已拉取外部检索 %s 条，用于增强知识生成", len(hits))
+    else:
+        logger.info("[generate_knowledge] 外部检索无结果或未启用，将按纯模型常识生成")
+
     template = config.load_prompt("generate_knowledge.txt")
     prompt = (
         template.replace("<<TOPIC_PLAN_JSON>>", json.dumps(plan, ensure_ascii=False))
+        .replace("<<SEARCH_RESULTS_JSON>>", search_json)
         .replace("<<BATCH_MIN>>", str(batch_min))
         .replace("<<BATCH_MAX>>", str(batch_max))
     )
+
+    allowed_urls = {h["url"] for h in hits}
 
     new_items: list[KnowledgeItem] = []
     try:
@@ -59,16 +70,21 @@ def generate_knowledge(state: FactoryState, llm: LLMClient | None = None) -> dic
             if not title or not content:
                 continue
             kid = f"k-{uuid.uuid4().hex[:12]}"
-            new_items.append(
-                KnowledgeItem(
-                    kid=kid,
-                    topic=plan["topic"],
-                    subtopic=subtopic,
-                    title=title,
-                    content=content,
-                    keywords=keywords[:12],
-                )
-            )
+            item: dict[str, Any] = {
+                "kid": kid,
+                "topic": plan["topic"],
+                "subtopic": subtopic,
+                "title": title,
+                "content": content,
+                "keywords": keywords[:12],
+            }
+            raw_sources = obj.get("sources", [])
+            if isinstance(raw_sources, list) and allowed_urls:
+                src = [str(x).strip() for x in raw_sources if str(x).strip() in allowed_urls]
+                src = src[:3]
+                if src:
+                    item["sources"] = src
+            new_items.append(cast(KnowledgeItem, item))
         except (KeyError, TypeError, ValueError) as e:
             logger.warning("[generate_knowledge] 丢弃无效知识条目：%s | data=%s", e, obj)
 

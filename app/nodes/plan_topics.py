@@ -10,6 +10,7 @@ from app import config
 from app.state import FactoryState, TopicPlan
 from app.utils.json_parser import JSONParseError, parse_json_array
 from app.utils.llm import LLMClient
+from app.utils.progress import format_factory_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -20,9 +21,14 @@ def plan_topics(state: FactoryState, llm: LLMClient | None = None) -> dict[str, 
     若已存在 topic_plans（非空），则跳过，避免重复规划。
     """
     if state.get("topic_plans"):
-        logger.info("[plan_topics] 已存在主题规划，跳过。")
+        logger.info("[plan_topics] 已存在主题规划，跳过。| %s", format_factory_snapshot(state))
         return {}
 
+    logger.info(
+        "[plan_topics] 调用模型规划主题… | domain前80字=%s | %s",
+        (state.get("domain", config.DEFAULT_DOMAIN) or "")[:80],
+        format_factory_snapshot(state),
+    )
     client = llm or LLMClient()
     template = config.load_prompt("plan_topics.txt")
     prompt = template.replace("<<DOMAIN>>", state.get("domain", config.DEFAULT_DOMAIN))
@@ -32,7 +38,9 @@ def plan_topics(state: FactoryState, llm: LLMClient | None = None) -> dict[str, 
         arr = parse_json_array(raw)
     except (JSONParseError, Exception) as e:  # noqa: BLE001
         logger.exception("[plan_topics] 规划失败，将使用内置兜底主题：%s", e)
-        return {"topic_plans": _fallback_plans(state.get("domain", ""))}
+        fb = _fallback_plans(state.get("domain", ""))
+        logger.info("[plan_topics] 兜底主题数：%s", len(fb))
+        return {"topic_plans": fb}
 
     plans: list[TopicPlan] = []
     for item in arr:
@@ -54,7 +62,8 @@ def plan_topics(state: FactoryState, llm: LLMClient | None = None) -> dict[str, 
         logger.warning("[plan_topics] 主题数量不足 8，将用兜底补齐。")
         plans = _merge_with_fallback(plans, state.get("domain", ""))
 
-    logger.info("[plan_topics] 生成主题数：%s", len(plans))
+    top_names = [p["topic"] for p in plans[:10]]
+    logger.info("[plan_topics] 模型规划完成 | 主题数=%s | 预览=%s", len(plans[:10]), top_names[:5])
     return {"topic_plans": plans[:10]}
 
 

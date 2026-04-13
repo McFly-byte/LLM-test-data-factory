@@ -23,6 +23,8 @@ class KnowledgeItem(TypedDict):
     title: str
     content: str
     keywords: List[str]
+    # 若生成时参考了外部检索结果，可写入对应网页 URL，便于后续事实核查与评测
+    sources: NotRequired[List[str]]
 
 
 QuestionType = Literal["fact", "comparison", "troubleshooting", "best_practice", "boundary"]

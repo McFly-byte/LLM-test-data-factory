@@ -7,9 +7,10 @@ import logging
 from typing import Any
 
 from app import config
-from app.state import FactoryState, KnowledgeItem, QASample
+from app.state import FactoryState, QASample
 from app.utils.json_parser import JSONParseError, parse_json_object
 from app.utils.llm import LLMClient
+from app.utils.progress import format_factory_snapshot
 from app.utils.similarity import is_near_duplicate
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,14 @@ def review_qa(state: FactoryState, llm: LLMClient | None = None) -> dict[str, An
     if not pending:
         logger.info("[review_qa] 待审核队列为空，跳过。")
         return {}
+
+    to_model = sum(1 for q in pending if q.get("review_status", "pending") == "pending")
+    logger.info(
+        "[review_qa] 本轮待处理=%s（其中需模型审核 pending=%s）| %s",
+        len(pending),
+        to_model,
+        format_factory_snapshot(state),
+    )
 
     knowledge = {k["kid"]: k for k in state.get("knowledge_items", [])}
     accepted = list(state.get("accepted_qa", []))
@@ -46,6 +55,7 @@ def review_qa(state: FactoryState, llm: LLMClient | None = None) -> dict[str, An
             qa["review_reason"] = "证据缺失：evidence_kids 无法映射到知识条目"
             qa["risk_tags"] = ["证据缺失"]
             updated.append(qa)
+            logger.info("[review_qa] 单条结论 | qid=%s -> rejected | 证据缺失", qa.get("qid"))
             continue
 
         # 代码层近重复预检（与已接受集合比较）
@@ -56,6 +66,7 @@ def review_qa(state: FactoryState, llm: LLMClient | None = None) -> dict[str, An
             qa["review_reason"] = f"与已接受 query 近重复（相似度阈值={thr}）"
             qa["risk_tags"] = ["疑似重复"]
             updated.append(qa)
+            logger.info("[review_qa] 单条结论 | qid=%s -> rejected | 近重复", qa.get("qid"))
             continue
 
         prompt = (
@@ -90,6 +101,19 @@ def review_qa(state: FactoryState, llm: LLMClient | None = None) -> dict[str, An
             qa["risk_tags"] = ["解析失败"]
 
         updated.append(qa)
+        logger.info(
+            "[review_qa] 单条结论 | qid=%s -> %s | reason=%s",
+            qa.get("qid"),
+            qa.get("review_status"),
+            (qa.get("review_reason") or "")[:80],
+        )
 
-    logger.info("[review_qa] 完成一轮审核，pending 条数=%s", len(updated))
+    acc_n = sum(1 for x in updated if x.get("review_status") == "accepted")
+    rej_n = sum(1 for x in updated if x.get("review_status") == "rejected")
+    logger.info(
+        "[review_qa] 本轮结束 | 输出条数=%s（其中状态 accepted=%s rejected=%s）",
+        len(updated),
+        acc_n,
+        rej_n,
+    )
     return {"pending_qa": updated}
